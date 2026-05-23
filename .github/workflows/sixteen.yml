@@ -1,4 +1,4 @@
-name: QuantumROM Tools Sixteen for SM-T561
+name: QuantumROM Tools Sixteen for SM-T561 (gtel3g)
 
 on:
   workflow_dispatch:
