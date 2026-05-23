@@ -8,25 +8,25 @@ on:
         required: true
         default: "SM-T561"
       USE_UI_8_TETHERING_APEX:
-        description: "Set True if your kernel BPF version is 5.4 (lower than 5.10)."
+        description: "Set True if your kernel BPF version is 5.4"
         required: true
         default: "True"
       TARGET_DEVICE:
-        description: "TARGET_DEVICE_MODEL."
+        description: "TARGET_DEVICE_MODEL"
         required: true
         default: "SM-T561"
       TARGET_DEVICE_CSC:
-        description: "TARGET_DEVICE_CSC."
+        description: "TARGET_DEVICE_CSC"
         required: true
         default: "INS"
       TARGET_DEVICE_IMEI:
-        description: "TARGET_DEVICE_IMEI (can be fake)."
+        description: "TARGET_DEVICE_IMEI (can be fake)"
         required: true
         default: "353435774197736"
       OUTPUT_FILESYSTEM:
-        description: "OUTPUT_FILESYSTEM. e.g erofs / ext4"
+        description: "OUTPUT_FILESYSTEM (erofs / ext4)"
         required: true
-        default: "ext4"
+        default: "erofs"
       COMPRESS_IMG_TO_XZ:
         description: "Compress IMG to XZ (True/False)"
         required: true
@@ -43,8 +43,7 @@ jobs:
 
       - name: Validate STOCK_DEVICE
         run: |
-          STOCK_DEVICE="${{ github.event.inputs.STOCK_DEVICE }}"
-          echo "Using device: $STOCK_DEVICE (gtel3g)"
+          echo "Using device: ${{ github.event.inputs.STOCK_DEVICE }} (gtel3g)"
           mkdir -p QuantumROM/Devices/SM-T561
 
       - name: Remove unnecessary files.
@@ -53,8 +52,10 @@ jobs:
       - name: Install Dependencies.
         run: |
           sudo apt update
-          sudo apt install -y p7zip-full lz4 liblz4-1 liblz4-dev libzstd1 libzstd-dev build-essential android-sdk-libsparse-utils f2fs-tools fuse2fs fuse e2fsprogs python3 python3-pip zipalign unzip openjdk-17-jdk jq perl xxd kmod
-          sudo pip3 install --break-system-packages git+https://github.com
+          sudo apt install -y p7zip-full lz4 liblz4-1 liblz4-dev libzstd1 libzstd-dev build-essential android-sdk-libsparse-utils f2fs-tools fuse2fs fuse e2fsprogs python3 python3-pip zipalign unzip openjdk-17-jdk jq perl xxd linux-modules-extra-$(uname -r) kmod git curl
+          sudo modprobe f2fs
+          pip3 install --upgrade pip
+          pip3 install git+https://github.com/samloader/samloader.git --break-system-packages || echo "samloader skipped"
           mkdir -p FW WORK OUT
 
       - name: Start Rom Build For SM-T561
@@ -67,21 +68,20 @@ jobs:
             "${{ github.event.inputs.TARGET_DEVICE_IMEI }}" \
             "${{ github.event.inputs.OUTPUT_FILESYSTEM }}"
 
-      - name: Compress all .img & make zip file before upload.
+      - name: Compress and Create ZIP
         run: |
           echo "BUILD_TIME=$(TZ='Asia/Dhaka' date '+%Y-%m-%d %I:%M:%S %p UTC+6')" >> $GITHUB_ENV
           OUT_DIR="$(pwd)/OUT"
           ZIP_NAME="SM-T561_QuantumROM.zip"
           ZIP_PATH="$OUT_DIR/$ZIP_NAME"
-
           echo "Creating zip: $ZIP_NAME"
-          cd "$OUT_DIR" && 7z a -tzip "../$ZIP_NAME" * -mx=5
-          cd .. && mv "$ZIP_NAME" OUT/
-          echo "ZIP_PATH=$(pwd)/OUT/$ZIP_NAME" >> $GITHUB_ENV
+          7z a -tzip "$ZIP_PATH" "$OUT_DIR"/* -mx=5
+          echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
 
-      - name: Upload Flashable ROM to GitHub Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: QuantumROM-SM-T561-Package
-          path: OUT/SM-T561_QuantumROM.zip
-          retention-days: 7
+      - name: Upload file & Create Release.
+        env:
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
+          STOCK_DEVICE: ${{ github.event.inputs.STOCK_DEVICE }}
+          TARGET_DEVICE: ${{ github.event.inputs.TARGET_DEVICE }}
+        run: |
+          bash release.sh || echo "Release step skipped"
